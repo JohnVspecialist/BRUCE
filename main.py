@@ -4,6 +4,7 @@ import logging
 import config
 from api_client import APIClient
 from bouncer_policy import BouncerPolicy
+from game_state import GameState
 
 def run_game(scenario: int):
     """Initializes and runs a single game scenario."""
@@ -20,42 +21,35 @@ def run_game(scenario: int):
         attribute_statistics=initial_response["attributeStatistics"],
     )
 
+    # Initialize game state
+    game_state = GameState()
+    game_state.initialize_attributes(policy.attribute_ids)
+
     # Get the first person
     response = client.decide_and_next(game_id, person_index=0)
 
-    # Game state tracker.
-    # NOTE: The API does not provide a running total of admitted attributes,
-    # only the total count. We must track the attribute breakdown locally to
-    # inform our policy. This is a potential point of divergence if an API
-    # call fails permanently after being retried, but is a necessary
-    # implementation detail given the API's design.
-    admitted_attributes_tracker = {
-        attr: 0 for attr in policy.attribute_ids
-    }
-
     while response.get("status") == "running":
+        # Update state with server's view
+        game_state.admitted_count = response["admittedCount"]
+        game_state.rejected_count = response["rejectedCount"]
+
         person = response["nextPerson"]
         person_index = person["personIndex"]
         person_attributes = person["attributes"]
 
-        game_state = {
-            "admittedCount": response["admittedCount"],
-            "admittedAttributes": admitted_attributes_tracker,
-        }
-
         # Decide
-        accept = policy.decide(person_attributes, game_state)
+        accept = policy.decide(person_attributes, game_state.to_dict())
 
-        # Act and update state
+        # Act and update local state
         if accept:
-            for attr, has_attr in person_attributes.items():
-                if has_attr:
-                    admitted_attributes_tracker[attr] += 1
+            game_state.record_acceptance(person_attributes)
+        else:
+            game_state.record_rejection()
 
         logging.info(
             f"Person {person_index}: {'Accepted' if accept else 'Rejected'}. "
-            f"Admitted: {response['admittedCount']}/{config.VENUE_CAPACITY}. "
-            f"Rejected: {response['rejectedCount']}."
+            f"Admitted: {game_state.admitted_count}/{config.VENUE_CAPACITY}. "
+            f"Rejected: {game_state.rejected_count}."
         )
 
         response = client.decide_and_next(game_id, person_index, accept)
