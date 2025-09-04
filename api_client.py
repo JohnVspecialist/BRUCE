@@ -19,7 +19,7 @@ class APIClient:
             total=5,
             backoff_factor=1,
             status_forcelist=[502, 503, 504],
-            allowed_methods={"POST", "GET"},
+            allowed_methods=frozenset(["POST", "GET"]),
         )
         adapter = HTTPAdapter(max_retries=retries)
         session.mount("http://", adapter)

@@ -63,6 +63,9 @@ class BouncerPolicy:
         # 5. Make the decision
         decision = person_score >= expected_score_of_next_person
 
-        # logging.debug(f"Person Score: {person_score:.2f}, Threshold: {expected_score_of_next_person:.2f}. Decision: {'Accept' if decision else 'Reject'}")
+        logging.info(
+            f"Policy decision: {'Accept' if decision else 'Reject'}. "
+            f"Score: {person_score:.3f}, Threshold: {expected_score_of_next_person:.3f}"
+        )
 
         return decision
